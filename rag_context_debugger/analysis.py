@@ -1,8 +1,11 @@
-from typing import Dict, Any, List, TypedDict, Optional
+from typing import Dict, Any, List, TypedDict, Optional, Union
 from datetime import datetime
 
 # Library imports
 from tecton.framework.data_frame import FeatureVector
+
+# Local application imports
+from .mock_client import MockFeatureVector, MockSloInfo
 
 # Using TypedDict for well-defined, type-checked dictionary structures.
 # This makes the data flow between modules much safer and easier to reason about.
@@ -26,7 +29,7 @@ class AnalysisResult(TypedDict):
     raw_metadata: Dict[str, Any]
     error: Optional[str]
 
-def analyze_feature_vector(fv_object: FeatureVector) -> AnalysisResult:
+def analyze_feature_vector(fv_object: Union[FeatureVector, MockFeatureVector]) -> AnalysisResult:
     """
     Takes a Tecton FeatureVector object and returns a structured dictionary of analysis results.
     This function is the heart of the debugger's logic.
@@ -41,14 +44,21 @@ def analyze_feature_vector(fv_object: FeatureVector) -> AnalysisResult:
     features_dict: Dict[str, Any] = fv_object.to_dict()  # type: ignore
 
     # 2. Analyze SLO Information
-    slo_info: Optional[Dict[str, str]] = fv_object.slo_info
+    slo_info = fv_object.slo_info
     slo_report: Optional[SloReport] = None
     if slo_info:
-        slo_report = {
-            "is_eligible": slo_info.get("slo_eligible", "false").lower() == "true",
-            "server_time_seconds": float(slo_info.get("slo_server_time_seconds", 0)) if slo_info.get("slo_server_time_seconds") else None,
-            "dynamodb_time_seconds": float(slo_info.get("slo_store_response_time_seconds", 0)) if slo_info.get("slo_store_response_time_seconds") else None
-        }
+        if isinstance(slo_info, MockSloInfo):
+            slo_report = {
+                "is_eligible": slo_info.slo_eligible,
+                "server_time_seconds": slo_info.slo_server_time_seconds,
+                "dynamodb_time_seconds": slo_info.store_response_time_seconds
+            }
+        else:
+            slo_report = {
+                "is_eligible": slo_info.get("slo_eligible", "false").lower() == "true",
+                "server_time_seconds": float(slo_info.get("slo_server_time_seconds", 0)) if slo_info.get("slo_server_time_seconds") else None,
+                "dynamodb_time_seconds": float(slo_info.get("slo_store_response_time_seconds", 0)) if slo_info.get("slo_store_response_time_seconds") else None
+            }
 
     # 3. Perform Temporal Cohesion Analysis
     # Use return_effective_times parameter for to_dict

@@ -18,6 +18,15 @@ class MockFeatureVector:
         self.metadata = metadata
         self.slo_info = slo_info
 
+    def to_dict(self, return_effective_times: bool = False) -> Dict[str, Any]:
+        """Mock implementation of to_dict method to match Tecton SDK interface."""
+        if return_effective_times:
+            return {
+                "__metadata__": self.metadata
+            }
+        else:
+            return {k: v for k, v in self.data}
+
 class MockTectonDebuggerClient:
     """
     A mock client that simulates responses from the Tecton SDK.
