@@ -44,8 +44,8 @@ def _extract_key_phrases(chunks: List[RetrievedChunk]) -> List[str]:
 
 def display_visual_summary(analysis: AnalysisResult) -> None:
     """Renders the main diagnostic summary with metrics."""
-    report = analysis['health_report']
-    status = report['status']
+    report = analysis.get('health_report', {})
+    status = report.get('status', 'UNKNOWN')
     color = _get_status_color(status)
 
     st.header(f"Context Health: :{color}[{status}]")
@@ -61,7 +61,7 @@ def display_visual_summary(analysis: AnalysisResult) -> None:
 
     with col2:
         st.subheader("Relevance Distribution")
-        chunks = analysis['retrieved_chunks']
+        chunks = analysis.get('retrieved_chunks', [])
         if chunks:
             # Create a simple bar chart of relevance scores
             scores = [chunk['score'] for chunk in chunks]
@@ -81,7 +81,7 @@ def display_visual_summary(analysis: AnalysisResult) -> None:
     if analysis.get('generated_answer'):
         st.markdown("---")
         st.subheader("Generated Answer")
-        st.markdown(analysis['generated_answer'])
+        st.markdown(analysis.get('generated_answer', ''))
         
         confidence = analysis.get('answer_confidence')
         if confidence is not None:
@@ -97,7 +97,7 @@ def display_visual_summary(analysis: AnalysisResult) -> None:
 def display_context_details(analysis: AnalysisResult) -> None:
     """Renders the detailed, annotated context chunks."""
     st.header("Retrieved Context Details")
-    chunks = analysis['retrieved_chunks']
+    chunks = analysis.get('retrieved_chunks', [])
     
     if not chunks:
         st.warning("No context was retrieved.")
@@ -120,8 +120,8 @@ def display_context_details(analysis: AnalysisResult) -> None:
 def format_cli_report(analysis: AnalysisResult) -> str:
     """Formats the full analysis result into a string for CLI output."""
     report_parts: List[str] = []
-    report = analysis['health_report']
-    status = report['status']
+    report = analysis.get('health_report', {})
+    status = report.get('status', 'UNKNOWN')
     color = "green" if status == "HEALTHY" else ("yellow" if status == "WARNING" else "red")
 
     report_parts.append(f"\n--- Context Health Report ---")
@@ -136,7 +136,7 @@ def format_cli_report(analysis: AnalysisResult) -> str:
     # Add answer surface information
     if analysis.get('generated_answer'):
         report_parts.append(click.style("\n--- Generated Answer ---", fg="green"))
-        report_parts.append(analysis['generated_answer'])
+        report_parts.append(analysis.get('generated_answer', ''))
         
         confidence = analysis.get('answer_confidence')
         if confidence is not None:
@@ -149,7 +149,7 @@ def format_cli_report(analysis: AnalysisResult) -> str:
         report_parts.append("Answer Confidence: n/a")
 
     report_parts.append(click.style("\n--- Retrieved Context Chunks ---", fg="cyan"))
-    chunks = analysis['retrieved_chunks']
+    chunks = analysis.get('retrieved_chunks', [])
     if not chunks:
         report_parts.append("No context was retrieved.")
     else:

@@ -61,8 +61,9 @@ def main(status: str, quality: str, join_keys: str, query: str, seed: Optional[i
         analysis: AnalysisResult = analyze_retrieved_context(feature_vector)
 
         # Check for analysis errors
-        if analysis.get('error') is not None:
-            click.secho(f"Analysis Error: {analysis['error']}", fg="red", err=True)
+        error = analysis.get('error')
+        if error:
+            click.secho(f"Analysis Error: {error}", fg="red", err=True)
             return
 
         click.echo("📊 Generating report...")
