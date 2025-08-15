@@ -1,21 +1,9 @@
 import re
 import click
 from typing import List, Dict
+import streamlit as st
+import plotly.express as px  # type: ignore
 from .analysis import AnalysisResult, RetrievedChunk
-
-# Conditional imports for UI components
-_streamlit_available = False
-_streamlit = None
-_plotly = None
-
-try:
-    import streamlit as st
-    import plotly.express as px
-    _streamlit_available = True
-    _streamlit = st
-    _plotly = px
-except ImportError:
-    pass
 
 def _get_status_color(status: str) -> str:
     return "green" if status == "HEALTHY" else ("orange" if status == "WARNING" else "red")
@@ -56,67 +44,61 @@ def _extract_key_phrases(chunks: List[RetrievedChunk]) -> List[str]:
 
 def display_visual_summary(analysis: AnalysisResult) -> None:
     """Renders the main diagnostic summary with metrics."""
-    if not _streamlit_available or _streamlit is None:
-        raise ImportError("Streamlit is required for UI components. Install with: pip install streamlit plotly")
-    
     report = analysis['health_report']
     status = report['status']
     color = _get_status_color(status)
 
-    _streamlit.header(f"Context Health: :{color}[{status}]")
-    _streamlit.write(f"**Diagnosis:** {report['message']}")
+    st.header(f"Context Health: :{color}[{status}]")
+    st.write(f"**Diagnosis:** {report['message']}")
     
-    col1, col2 = _streamlit.columns([1, 1])
+    col1, col2 = st.columns([1, 1])
     
     with col1:
-        _streamlit.subheader("Key Metrics")
-        _streamlit.metric("Retrieved Chunks", report['chunk_count'])
-        _streamlit.metric("Avg. Relevance Score", f"{report['avg_relevance_score']:.2f}")
-        _streamlit.metric("Semantic Diversity", f"{report['semantic_diversity_score']:.2f}", help="Score from 0 (repetitive) to 1 (diverse).")
+        st.subheader("Key Metrics")
+        st.metric("Retrieved Chunks", report['chunk_count'])
+        st.metric("Avg. Relevance Score", f"{report['avg_relevance_score']:.2f}")
+        st.metric("Semantic Diversity", f"{report['semantic_diversity_score']:.2f}", help="Score from 0 (repetitive) to 1 (diverse).")
 
     with col2:
-        _streamlit.subheader("Relevance Distribution")
+        st.subheader("Relevance Distribution")
         chunks = analysis['retrieved_chunks']
-        if chunks and _plotly is not None:
+        if chunks:
             # Create a simple bar chart of relevance scores
             scores = [chunk['score'] for chunk in chunks]
             labels = [f"Chunk {i+1}" for i in range(len(chunks))]
             
-            fig = _plotly.bar(
+            fig = px.bar(  # type: ignore
                 x=labels, y=scores,
                 title="Relevance Scores by Chunk",
                 labels={'x': 'Chunk', 'y': 'Relevance Score'}
             )
-            fig.update_layout(yaxis_range=[0, 1])
-            _streamlit.plotly_chart(fig, use_container_width=True)
+            fig.update_layout(yaxis_range=[0, 1])  # type: ignore
+            st.plotly_chart(fig, use_container_width=True)  # type: ignore
         else:
-            _streamlit.info("No chunks available for visualization.")
+            st.info("No chunks available for visualization.")
 
 def display_context_details(analysis: AnalysisResult) -> None:
     """Renders the detailed, annotated context chunks."""
-    if not _streamlit_available or _streamlit is None:
-        raise ImportError("Streamlit is required for UI components. Install with: pip install streamlit plotly")
-    
-    _streamlit.header("Retrieved Context Details")
+    st.header("Retrieved Context Details")
     chunks = analysis['retrieved_chunks']
     
     if not chunks:
-        _streamlit.warning("No context was retrieved.")
+        st.warning("No context was retrieved.")
         return
 
     # Extract key phrases for highlighting
     key_phrases = _extract_key_phrases(chunks)
 
     for i, chunk in enumerate(chunks):
-        _streamlit.markdown(f"---")
-        col1, col2 = _streamlit.columns([3, 1])
+        st.markdown(f"---")
+        col1, col2 = st.columns([3, 1])
         with col1:
-            _streamlit.markdown(f"**Chunk {i+1}**")
+            st.markdown(f"**Chunk {i+1}**")
             highlighted_text = _highlight_text(chunk['text'], key_phrases)
-            _streamlit.markdown(f'<div style="background-color:#f8f9fa; padding: 10px; border-radius: 5px;">{highlighted_text}</div>', unsafe_allow_html=True)
+            st.markdown(f'<div style="background-color:#f8f9fa; color: black; padding: 10px; border-radius: 5px;">{highlighted_text}</div>', unsafe_allow_html=True)
         with col2:
-            _streamlit.markdown(f"**Relevance**")
-            _streamlit.html(_create_relevance_bar(chunk['score']))
+            st.markdown(f"**Relevance**")
+            st.html(_create_relevance_bar(chunk['score']))
 
 def format_cli_report(analysis: AnalysisResult) -> str:
     """Formats the full analysis result into a string for CLI output."""

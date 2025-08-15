@@ -27,12 +27,12 @@ def main() -> None:
     
     query = st.text_input(
         "User Query", "How do I reset my password?",
-        help="In Mock Mode, try 'low relevance' or 'context collapse'."
+        help="In Mock Mode, try 'Green', 'Yellow', 'Red', 'Irrelevant', 'Repetitive', or 'Fail'."
     )
 
     col1, col2 = st.columns(2)
     with col1:
-        default_service = "product_rag_service"
+        default_service = "Green" if use_mock else "product_rag_service"
         service_name = st.text_input("Feature Service Name", default_service)
     with col2:
         join_keys_str = st.text_input("Join Keys (JSON)", '{"user_id": "user_465"}')

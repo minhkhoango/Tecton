@@ -168,18 +168,18 @@ def analyze_retrieved_context(fv_object: FeatureVectorProtocol | None) -> Analys
     
     # Determine health status
     status = "HEALTHY"
-    message = "Retrieved context appears relevant and diverse."
+    message = "GOOD: The chunks answer the user's question well and provide different useful information."
     
     if avg_score < 0.75:
         status = "CRITICAL"
-        message = "Relevance scores are critically low. Context is likely off-topic."
+        message = "BAD: The chunks don't answer the user's question well. They're off-topic."
     elif avg_score < 0.82:
         status = "WARNING"
-        message = "Relevance scores are mediocre. Review context for relevance."
+        message = "WARNING: The chunks only kinda answer the user's question. They're not very helpful."
         
     if diversity_score < 0.80 and status != "CRITICAL":
         status = "WARNING"
-        message = "Semantic diversity is low ('context collapse'). Chunks are repetitive."
+        message = "WARNING: The chunks are too similar to each other. They're basically saying the same thing."
 
     final_health_report: ContextHealthReport = {
         "status": status, 

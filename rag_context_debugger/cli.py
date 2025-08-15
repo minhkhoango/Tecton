@@ -7,13 +7,19 @@ from .analysis import analyze_retrieved_context, AnalysisResult
 from .ui_components import format_cli_report
 
 @click.command()
-@click.option('--service-name', required=True, help='The Tecton Feature Service for RAG.')
-@click.option('--join-keys', required=True, help='A JSON string of join keys.')
+@click.option('--status', help='The Tecton Feature status for RAG. Required for mock mode, optional for live mode.')
+@click.option('--join-keys', default='{"user_id": "test"}', help='A JSON string of join keys.')
 @click.option('--query', default="Analyze context quality and relevance", help='The user query to diagnose. (Optional, has default)')
 @click.option('--mock', is_flag=True, default=False, help='Run in mock mode.')
-def main(service_name: str, join_keys: str, query: str, mock: bool) -> None:
+def main(status: str, join_keys: str, query: str, mock: bool) -> None:
     """A 1-Click Debugger for RAG Context Quality."""
     try:
+        # Validate status parameter based on mode
+        if mock and not status:
+            click.secho("Error: --status is required when running in mock mode.", fg="red", err=True)
+            click.echo("Available mock statuses: Green, Yellow, Red, Irrelevant, Repetitive, Fail")
+            return
+        
         if not mock and config is None:
             raise ConfigError("To run in Live Mode, set Tecton env vars. Use --mock to simulate.")
 
@@ -21,6 +27,9 @@ def main(service_name: str, join_keys: str, query: str, mock: bool) -> None:
         
         mode = "MOCK" if mock else "LIVE"
         click.echo(f"🔬 Running in {click.style(mode, bold=True)} mode.")
+        
+        if mock:
+            click.echo(f"🎭 Mock Status: {click.style(status, bold=True)}")
         click.echo(f"💬 Diagnosing Query: {click.style(query, bold=True)}")
         
         if mock:
@@ -31,7 +40,13 @@ def main(service_name: str, join_keys: str, query: str, mock: bool) -> None:
             client = TectonDebuggerClient()
         
         click.echo("📡 Fetching context vector...")
-        feature_vector = client.fetch_context_vector(service_name, join_keys_dict, {"query": query})
+        # For live mode, status might be None, so we need to handle that
+        if mock:
+            feature_vector = client.fetch_context_vector(status, join_keys_dict, {"query": query})
+        else:
+            # In live mode, status is not used by the real client
+            feature_vector = client.fetch_context_vector("", join_keys_dict, {"query": query})
+        
         click.echo("🔍 Analyzing context...")
         analysis: AnalysisResult = analyze_retrieved_context(feature_vector)
 
@@ -53,4 +68,4 @@ def main(service_name: str, join_keys: str, query: str, mock: bool) -> None:
         click.secho(f"An unexpected error occurred: {e}", fg="red", err=True)
 
 if __name__ == "__main__":
-    main()
+    main() 

@@ -9,7 +9,7 @@ An interactive diagnostic tool that provides instant, **visual analysis** of RAG
 poetry install
 
 # Test with mock scenarios (no setup required)
-poetry run rag-debug --mock --service-name "green_scenario_service" --join-keys '{"user_id": "test"}'
+poetry run rag-debug --mock --status "Green"
 
 # Launch interactive web app
 poetry run streamlit run app.py
@@ -42,7 +42,7 @@ Navigate to the local URL. Use "Run in Mock Mode" to simulate API calls without 
 
 **Live Mode:**
 ```bash
-poetry run rag-debug --service-name "your_feature_service" --join-keys '{"user_id": "xyz-123"}'
+poetry run rag-debug --join-keys '{"user_id": "xyz-123"}'
 ```
 
 **Mock Mode:**
@@ -50,26 +50,26 @@ Use `--mock` flag to test different RAG context quality scenarios:
 
 | Service Name | Status | Description |
 |--------------|--------|-------------|
-| `green_scenario_service` | HEALTHY | Optimal context quality (0.85-0.92 scores, 0.92 diversity) |
-| `yellow_scenario_service` | WARNING | Mediocre relevance with null values |
-| `red_scenario_service` | CRITICAL | Poor relevance scores below 0.75 |
-| `low_relevance_service` | CRITICAL | Low relevance context (0.61-0.65 scores) |
-| `collapse_service` | WARNING | Context collapse - repetitive content (0.79 diversity) |
-| `fail_service` | CRITICAL | Failed retrieval - no chunks |
+| `Green` | HEALTHY | Optimal context quality (0.85-0.92 scores, 0.92 diversity) |
+| `Yellow` | WARNING | Mediocre relevance with null values |
+| `Red` | CRITICAL | Poor relevance scores below 0.75 |
+| `Irrelevant` | CRITICAL | Low relevance context (0.61-0.65 scores) |
+| `Repetitive` | WARNING | Context collapse - repetitive content (0.79 diversity) |
+| `Fail` | CRITICAL | Failed retrieval - no chunks |
 
 **Example Usage:**
 ```bash
 # Test healthy scenario
-poetry run rag-debug --mock --service-name "green_scenario_service" --join-keys '{"user_id": "any"}'
+poetry run rag-debug --mock --status "Green"
 
 # Test warning scenario (mediocre relevance)
-poetry run rag-debug --mock --service-name "yellow_scenario_service" --join-keys '{"user_id": "any"}'
+poetry run rag-debug --mock --status "Yellow"
 
 # Test context collapse (repetitive content)
-poetry run rag-debug --mock --service-name "collapse_service" --join-keys '{"user_id": "any"}'
+poetry run rag-debug --mock --status "Repetitive"
 ```
 
-**Note:** The `--query` parameter is optional. If not provided, a default query will be used.
+**Note:** The `--query` parameter is not needed for a mock run, where a default query will be used.
 
 ## Troubleshooting
 
@@ -77,8 +77,8 @@ poetry run rag-debug --mock --service-name "collapse_service" --join-keys '{"use
 
 | Problem | Cause | Solution |
 |---------|-------|----------|
-| **Low Relevance Scores (< 0.75)** | Context doesn't match query | Review vector search parameters, check embedding freshness, verify chunk settings |
-| **Context Collapse (Diversity < 0.80)** | Repetitive chunks | Reduce chunk overlap, implement deduplication, use diverse training data |
+| **Irrelevant (Avg_Scores < 0.75)** | Context doesn't match query | Review vector search parameters, check embedding freshness, verify chunk settings |
+| **Repetitive (Diversity < 0.80)** | Repetitive chunks | Reduce chunk overlap, implement deduplication, use diverse training data |
 | **No Context Retrieved** | Feature service returns empty results | Check join key values, verify service configuration, ensure data exists |
 
 ### Interpreting Results
