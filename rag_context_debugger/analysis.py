@@ -17,10 +17,12 @@ class ContextHealthReport(TypedDict):
     avg_relevance_score: float
     semantic_diversity_score: float
 
-class AnalysisResult(TypedDict):
+class AnalysisResult(TypedDict, total=False):
     retrieved_chunks: List[RetrievedChunk]
     health_report: ContextHealthReport
     error: Optional[str]
+    generated_answer: str
+    answer_confidence: float
 
 def _extract_chunks(fv_object: FeatureVectorProtocol) -> List[RetrievedChunk]:
     """Extract and parse retrieved context chunks from the feature vector."""
@@ -146,6 +148,11 @@ def analyze_retrieved_context(fv_object: FeatureVectorProtocol | None) -> Analys
     chunks = _extract_chunks(fv_object)
     chunk_count = len(chunks)
     
+    # Extract answer surface features
+    features = fv_object.to_dict()
+    generated_answer = features.get("retrieved_context.answer", "")
+    answer_confidence = features.get("retrieved_context.answer_confidence")
+    
     if chunk_count == 0:
         empty_health_report: ContextHealthReport = {
             "status": "CRITICAL", 
@@ -157,7 +164,9 @@ def analyze_retrieved_context(fv_object: FeatureVectorProtocol | None) -> Analys
         return {
             "retrieved_chunks": [], 
             "health_report": empty_health_report, 
-            "error": None
+            "error": None,
+            "generated_answer": generated_answer,
+            "answer_confidence": answer_confidence if answer_confidence is not None else 0.0
         }
 
     # Calculate metrics
@@ -170,10 +179,10 @@ def analyze_retrieved_context(fv_object: FeatureVectorProtocol | None) -> Analys
     status = "HEALTHY"
     message = "GOOD: The chunks answer the user's question well and provide different useful information."
     
-    if avg_score < 0.75:
+    if avg_score < 0.60:
         status = "CRITICAL"
         message = "BAD: The chunks don't answer the user's question well. They're off-topic."
-    elif avg_score < 0.82:
+    elif avg_score < 0.75:
         status = "WARNING"
         message = "WARNING: The chunks only kinda answer the user's question. They're not very helpful."
         
@@ -192,5 +201,7 @@ def analyze_retrieved_context(fv_object: FeatureVectorProtocol | None) -> Analys
     return {
         "retrieved_chunks": chunks, 
         "health_report": final_health_report, 
-        "error": None
+        "error": None,
+        "generated_answer": generated_answer,
+        "answer_confidence": answer_confidence if answer_confidence is not None else avg_score
     }

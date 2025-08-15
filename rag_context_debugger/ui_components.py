@@ -10,7 +10,7 @@ def _get_status_color(status: str) -> str:
 
 def _create_relevance_bar(score: float) -> str:
     """Creates an HTML progress bar to visualize relevance score."""
-    color = "green" if score > 0.85 else ("orange" if score > 0.75 else "red")
+    color = "green" if score > 0.75 else ("orange" if score > 0.6 else "red")
     return f"""
     <div style="background-color: #eee; border-radius: 5px; padding: 2px;">
         <div style="width: {score*100}%; background-color: {color}; height: 20px; border-radius: 5px; text-align: center; color: white; font-weight: bold;">
@@ -76,6 +76,23 @@ def display_visual_summary(analysis: AnalysisResult) -> None:
             st.plotly_chart(fig, use_container_width=True)  # type: ignore
         else:
             st.info("No chunks available for visualization.")
+    
+    # Display answer surface if available
+    if analysis.get('generated_answer'):
+        st.markdown("---")
+        st.subheader("Generated Answer")
+        st.markdown(analysis['generated_answer'])
+        
+        confidence = analysis.get('answer_confidence')
+        if confidence is not None:
+            st.metric("Answer Confidence", f"{confidence:.2f}")
+        else:
+            st.metric("Answer Confidence", "n/a")
+    else:
+        st.markdown("---")
+        st.subheader("Generated Answer")
+        st.info("No answer generated")
+        st.metric("Answer Confidence", "n/a")
 
 def display_context_details(analysis: AnalysisResult) -> None:
     """Renders the detailed, annotated context chunks."""
@@ -115,6 +132,21 @@ def format_cli_report(analysis: AnalysisResult) -> str:
         f"Avg. Relevance: {report['avg_relevance_score']:.2f} | "
         f"Diversity: {report['semantic_diversity_score']:.2f}"
     )
+    
+    # Add answer surface information
+    if analysis.get('generated_answer'):
+        report_parts.append(click.style("\n--- Generated Answer ---", fg="green"))
+        report_parts.append(analysis['generated_answer'])
+        
+        confidence = analysis.get('answer_confidence')
+        if confidence is not None:
+            report_parts.append(f"Answer Confidence: {confidence:.2f}")
+        else:
+            report_parts.append("Answer Confidence: n/a")
+    else:
+        report_parts.append(click.style("\n--- Generated Answer ---", fg="green"))
+        report_parts.append("(none)")
+        report_parts.append("Answer Confidence: n/a")
 
     report_parts.append(click.style("\n--- Retrieved Context Chunks ---", fg="cyan"))
     chunks = analysis['retrieved_chunks']

@@ -25,17 +25,36 @@ def main() -> None:
 
     st.subheader("Diagnostic Request")
     
-    query = st.text_input(
-        "User Query", "How do I reset my password?",
-        help="In Mock Mode, try 'Green', 'Yellow', 'Red', 'Irrelevant', 'Repetitive', or 'Fail'."
-    )
+    if use_mock:
+        query = st.selectbox(
+            "User Query", 
+            [
+                "How do I reset my password?",
+                "How do I set up SSO with Okta?",
+                "How do I rotate my API key?"
+            ],
+            index=0
+        )
+    else:
+        query = st.text_input(
+            "User Query", 
+            value="How do I reset my password?"
+        )
 
     col1, col2 = st.columns(2)
     with col1:
-        default_service = "Green" if use_mock else "product_rag_service"
-        service_name = st.text_input("Feature Service Name", default_service)
+        if use_mock:
+            service_name = st.selectbox(
+                "Quality", 
+                options=['Green', 'Yellow', 'Red', 'Irrelevant', 'Repetitive', 'Fail'],
+                index=0
+            )
+        else:
+            service_name = st.selectbox("Feature Service Name", "product_rag_service")
     with col2:
-        join_keys_str = st.text_input("Join Keys (JSON)", '{"user_id": "user_465"}')
+        join_keys_str = st.text_input("Join Keys (JSON)", '{"user_id": "user_465"}', disabled=use_mock)
+        
+
 
     if st.button("Diagnose Context", type="primary", use_container_width=True):
         try:

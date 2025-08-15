@@ -1,5 +1,5 @@
 import json
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 import click
 from .config import config, ConfigError
 from .mock_client import MockTectonDebuggerClient
@@ -8,17 +8,23 @@ from .ui_components import format_cli_report
 
 @click.command()
 @click.option('--status', help='The Tecton Feature status for RAG. Required for mock mode, optional for live mode.')
+@click.option('--quality', type=click.Choice(['Green', 'Yellow', 'Red', 'Repetitive', 'Irrelevant', 'Fail']), help='Quality level for mock mode (alias for --status).')
 @click.option('--join-keys', default='{"user_id": "test"}', help='A JSON string of join keys.')
-@click.option('--query', default="Analyze context quality and relevance", help='The user query to diagnose. (Optional, has default)')
+@click.option('--query', default="How do I reset my password?", help='The user query to diagnose. (Optional, has default)')
+@click.option('--seed', type=int, help='Optional seed for deterministic mock output.')
 @click.option('--mock', is_flag=True, default=False, help='Run in mock mode.')
-def main(status: str, join_keys: str, query: str, mock: bool) -> None:
+def main(status: str, quality: str, join_keys: str, query: str, seed: Optional[int], mock: bool) -> None:
     """A 1-Click Debugger for RAG Context Quality."""
     try:
-        # Validate status parameter based on mode
-        if mock and not status:
-            click.secho("Error: --status is required when running in mock mode.", fg="red", err=True)
-            click.echo("Available mock statuses: Green, Yellow, Red, Irrelevant, Repetitive, Fail")
+        # Validate status/quality parameter based on mode
+        if mock and not status and not quality:
+            click.secho("Error: --status or --quality is required when running in mock mode.", fg="red", err=True)
+            click.echo("Available mock qualities: Green, Yellow, Red, Irrelevant, Repetitive, Fail")
             return
+        
+        # Prefer quality over status if both are provided
+        if quality:
+            status = quality
         
         if not mock and config is None:
             raise ConfigError("To run in Live Mode, set Tecton env vars. Use --mock to simulate.")
@@ -41,17 +47,21 @@ def main(status: str, join_keys: str, query: str, mock: bool) -> None:
         
         click.echo("📡 Fetching context vector...")
         # For live mode, status might be None, so we need to handle that
+        request_data: Dict[str, Any] = {"query": query}
+        if seed is not None:
+            request_data["seed"] = seed
+            
         if mock:
-            feature_vector = client.fetch_context_vector(status, join_keys_dict, {"query": query})
+            feature_vector = client.fetch_context_vector(status, join_keys_dict, request_data)
         else:
             # In live mode, status is not used by the real client
-            feature_vector = client.fetch_context_vector("", join_keys_dict, {"query": query})
+            feature_vector = client.fetch_context_vector("", join_keys_dict, request_data)
         
         click.echo("🔍 Analyzing context...")
         analysis: AnalysisResult = analyze_retrieved_context(feature_vector)
 
         # Check for analysis errors
-        if analysis.get('error'):
+        if analysis.get('error') is not None:
             click.secho(f"Analysis Error: {analysis['error']}", fg="red", err=True)
             return
 
