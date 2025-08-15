@@ -9,75 +9,49 @@ import streamlit as st
 from rag_context_debugger.config import config, ConfigError
 from rag_context_debugger.tecton_client import TectonDebuggerClient
 from rag_context_debugger.mock_client import MockTectonDebuggerClient
-from rag_context_debugger.analysis import analyze_feature_vector, AnalysisResult
-from rag_context_debugger.ui_components import display_summary_metrics, display_analysis_tabs
+from rag_context_debugger.analysis import analyze_retrieved_context, AnalysisResult
+from rag_context_debugger.ui_components import display_visual_summary, display_context_details
 
 def main() -> None:
-    """
-    Main function to run the Streamlit application.
-    """
     st.set_page_config(layout="wide", page_title="RAG Context Debugger")
-    st.title("🔬 1-Click RAG Context Debugger for Tecton")
+    st.title("🔬 1-Click RAG Context Debugger")
+    st.markdown("Instantly diagnose the quality of context retrieved for your RAG application.")
 
-    # --- Mode Selection ---
-    use_mock = st.checkbox(
-        "Run in Mock Mode (no API key needed)",
-        value=True,
-        help="Simulate API calls to demonstrate different scenarios without connecting to Tecton."
-    )
+    use_mock = st.checkbox("Run in Mock Mode", value=True, help="Simulate API calls without a live Tecton connection.")
 
     if not use_mock and config is None:
-        st.error(
-            "**Configuration Error:** To run in Live Mode, Tecton environment variables must be set. "
-            "Please set `TECTON_URL`, `TECTON_API_KEY`, and `TECTON_WORKSPACE` or use Mock Mode."
-        )
+        st.error("Please set Tecton environment variables or use Mock Mode.")
         st.stop()
 
-    # --- User Inputs ---
     st.subheader("Diagnostic Request")
-    col1, col2 = st.columns(2)
-    with col1:
-        # Provide helpful defaults for mock mode
-        default_service = "yellow_scenario_service" if use_mock else "fraud_detection_feature_service"
-        service_name = st.text_input(
-            "Feature Service Name", default_service,
-            help="In Mock Mode, use: green_scenario_service, yellow_scenario_service, or red_scenario_service."
-        )
-    with col2:
-        join_keys_str = st.text_input(
-            "Join Keys (JSON)", '{"user_id": "user_465"}',
-            help='The primary keys to look up features, as a JSON string.'
-        )
-
-    request_data_str = st.text_area(
-        "Request Context Map (JSON, Optional)", '{}',
-        help="Request-time data for on-demand features, as a JSON string."
+    
+    query = st.text_input(
+        "User Query", "How do I reset my password?",
+        help="In Mock Mode, try 'low relevance' or 'context collapse'."
     )
 
-    if st.button("Run Diagnosis", type="primary", use_container_width=True):
+    col1, col2 = st.columns(2)
+    with col1:
+        default_service = "product_rag_service"
+        service_name = st.text_input("Feature Service Name", default_service)
+    with col2:
+        join_keys_str = st.text_input("Join Keys (JSON)", '{"user_id": "user_465"}')
+
+    if st.button("Diagnose Context", type="primary", use_container_width=True):
         try:
             join_keys: Dict[str, Any] = json.loads(join_keys_str)
-            request_data: Dict[str, Any] = json.loads(request_data_str)
-
-            with st.spinner("Fetching and analyzing context..."):
-                # --- CONDITIONAL CLIENT INITIALIZATION ---
-                # Based on the checkbox, we instantiate either the real or mock client.
-                # This is a clean way to implement a strategy pattern.
-                if use_mock:
-                    client: Any = MockTectonDebuggerClient()
-                else:
-                    client = TectonDebuggerClient()
-
-                feature_vector = client.fetch_context_vector(service_name, join_keys, request_data)
-                analysis: AnalysisResult = analyze_feature_vector(feature_vector)
+            
+            with st.spinner("Retrieving and analyzing RAG context..."):
+                client: Any = MockTectonDebuggerClient() if use_mock else TectonDebuggerClient()
+                feature_vector = client.fetch_context_vector(service_name, join_keys, {"query": query})
+                analysis: AnalysisResult = analyze_retrieved_context(feature_vector)
 
             st.success("Analysis Complete!")
 
-            display_summary_metrics(analysis)
-            display_analysis_tabs(analysis)
+            # Call the new, visually-driven UI components
+            display_visual_summary(analysis)
+            display_context_details(analysis)
 
-        except json.JSONDecodeError:
-            st.error("Invalid JSON provided. Please check the format of your Join Keys or Request Context.")
         except (ConfigError, ConnectionError, ValueError, RuntimeError) as e:
             st.error(f"An error occurred: {e}")
         except Exception as e:

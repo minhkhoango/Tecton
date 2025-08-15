@@ -1,100 +1,148 @@
-# Library imports
-import streamlit as st
-import pandas as pd
+import re
 import click
-from typing import List
+from typing import List, Dict
+from .analysis import AnalysisResult, RetrievedChunk
 
-# Local application imports
-from .analysis import AnalysisResult
+# Conditional imports for UI components
+_streamlit_available = False
+_streamlit = None
+_plotly = None
 
-# --- Streamlit Components ---
+try:
+    import streamlit as st
+    import plotly.express as px
+    _streamlit_available = True
+    _streamlit = st
+    _plotly = px
+except ImportError:
+    pass
 
-def display_summary_metrics(analysis: AnalysisResult) -> None:
-    """Renders the high-level summary metrics in Streamlit."""
-    st.subheader("Diagnostic Summary")
-    
-    slo = analysis.get('slo_report')
-    temporal = analysis.get('temporal_report')
-    
-    col1, col2, col3 = st.columns(3)
-    
-    # Latency Metric
-    latency = slo.get('server_time_seconds', 0.0) if slo else 0.0
-    col1.metric("Server Latency", f"{latency:.4f}s", help="Time taken by Tecton to compute and retrieve the feature vector.")
-    
-    # Temporal Spread Metric
-    spread = temporal.get('time_spread_seconds', 0.0) if temporal else 0.0
-    col2.metric("Temporal Spread", f"{spread:.2f}s", help="The time difference between the newest and oldest features in the context vector.")
-    
-    # Cohesion Risk Metric
-    risk = temporal.get('risk_level', 'N/A') if temporal else 'N/A'
-    col3.metric("Cohesion Risk", risk, help="An assessment of risk based on the temporal spread. HIGH risk may lead to logically inconsistent context.")
+def _get_status_color(status: str) -> str:
+    return "green" if status == "HEALTHY" else ("orange" if status == "WARNING" else "red")
 
-def display_analysis_tabs(analysis: AnalysisResult) -> None:
-    """Renders the detailed analysis in a set of tabs in Streamlit."""
-    tab1, tab2, tab3 = st.tabs(["Feature Values", "Temporal Analysis", "Raw Metadata"])
+def _create_relevance_bar(score: float) -> str:
+    """Creates an HTML progress bar to visualize relevance score."""
+    color = "green" if score > 0.85 else ("orange" if score > 0.75 else "red")
+    return f"""
+    <div style="background-color: #eee; border-radius: 5px; padding: 2px;">
+        <div style="width: {score*100}%; background-color: {color}; height: 20px; border-radius: 5px; text-align: center; color: white; font-weight: bold;">
+            {score:.2f}
+        </div>
+    </div>
+    """
 
-    with tab1:
-        st.markdown("#### Retrieved Feature Values")
-        features = analysis.get('features', {})
-        if features:
-            features_df = pd.DataFrame(features.items(), columns=['Feature Name', 'Value'])
-            st.dataframe(features_df, use_container_width=True)  # type: ignore
+def _highlight_text(text: str, phrases: List[str]) -> str:
+    """Highlights a list of phrases in a block of text."""
+    for phrase in phrases:
+        # Use regex to find whole words/phrases only, case-insensitive
+        text = re.sub(f"({re.escape(phrase)})", r'<mark style="background-color: #FFDDAA; padding: 2px 0px; border-radius: 3px;">\1</mark>', text, flags=re.IGNORECASE)
+    return text
+
+def _extract_key_phrases(chunks: List[RetrievedChunk]) -> List[str]:
+    """Extract key phrases from chunks for highlighting."""
+    if not chunks:
+        return []
+    
+    # Simple approach: extract common words that appear in multiple chunks
+    word_counts: Dict[str, int] = {}
+    for chunk in chunks:
+        words = chunk['text'].lower().split()
+        for word in words:
+            if len(word) > 3:  # Only consider words longer than 3 characters
+                word_counts[word] = word_counts.get(word, 0) + 1
+    
+    # Return words that appear in at least 2 chunks
+    return [word for word, count in word_counts.items() if count >= 2][:10]
+
+def display_visual_summary(analysis: AnalysisResult) -> None:
+    """Renders the main diagnostic summary with metrics."""
+    if not _streamlit_available or _streamlit is None:
+        raise ImportError("Streamlit is required for UI components. Install with: pip install streamlit plotly")
+    
+    report = analysis['health_report']
+    status = report['status']
+    color = _get_status_color(status)
+
+    _streamlit.header(f"Context Health: :{color}[{status}]")
+    _streamlit.write(f"**Diagnosis:** {report['message']}")
+    
+    col1, col2 = _streamlit.columns([1, 1])
+    
+    with col1:
+        _streamlit.subheader("Key Metrics")
+        _streamlit.metric("Retrieved Chunks", report['chunk_count'])
+        _streamlit.metric("Avg. Relevance Score", f"{report['avg_relevance_score']:.2f}")
+        _streamlit.metric("Semantic Diversity", f"{report['semantic_diversity_score']:.2f}", help="Score from 0 (repetitive) to 1 (diverse).")
+
+    with col2:
+        _streamlit.subheader("Relevance Distribution")
+        chunks = analysis['retrieved_chunks']
+        if chunks and _plotly is not None:
+            # Create a simple bar chart of relevance scores
+            scores = [chunk['score'] for chunk in chunks]
+            labels = [f"Chunk {i+1}" for i in range(len(chunks))]
+            
+            fig = _plotly.bar(
+                x=labels, y=scores,
+                title="Relevance Scores by Chunk",
+                labels={'x': 'Chunk', 'y': 'Relevance Score'}
+            )
+            fig.update_layout(yaxis_range=[0, 1])
+            _streamlit.plotly_chart(fig, use_container_width=True)
         else:
-            st.info("No features were retrieved.")
+            _streamlit.info("No chunks available for visualization.")
 
-    with tab2:
-        st.markdown("#### Point-in-Time Correctness")
-        temporal = analysis.get('temporal_report')
-        if temporal and temporal.get('feature_timestamps'):
-            ts_df = pd.DataFrame(temporal['feature_timestamps'].items(), columns=['Feature Name', 'Effective Timestamp'])
-            st.dataframe(ts_df, use_container_width=True)  # type: ignore
-        else:
-            st.info("No temporal data available for analysis (requires at least two features with timestamps).")
+def display_context_details(analysis: AnalysisResult) -> None:
+    """Renders the detailed, annotated context chunks."""
+    if not _streamlit_available or _streamlit is None:
+        raise ImportError("Streamlit is required for UI components. Install with: pip install streamlit plotly")
     
-    with tab3:
-        st.markdown("#### Raw Tecton Metadata")
-        st.json(analysis.get('raw_metadata', {}))
+    _streamlit.header("Retrieved Context Details")
+    chunks = analysis['retrieved_chunks']
+    
+    if not chunks:
+        _streamlit.warning("No context was retrieved.")
+        return
 
-# --- CLI Formatting Component ---
+    # Extract key phrases for highlighting
+    key_phrases = _extract_key_phrases(chunks)
+
+    for i, chunk in enumerate(chunks):
+        _streamlit.markdown(f"---")
+        col1, col2 = _streamlit.columns([3, 1])
+        with col1:
+            _streamlit.markdown(f"**Chunk {i+1}**")
+            highlighted_text = _highlight_text(chunk['text'], key_phrases)
+            _streamlit.markdown(f'<div style="background-color:#f8f9fa; padding: 10px; border-radius: 5px;">{highlighted_text}</div>', unsafe_allow_html=True)
+        with col2:
+            _streamlit.markdown(f"**Relevance**")
+            _streamlit.html(_create_relevance_bar(chunk['score']))
 
 def format_cli_report(analysis: AnalysisResult) -> str:
     """Formats the full analysis result into a string for CLI output."""
     report_parts: List[str] = []
+    report = analysis['health_report']
+    status = report['status']
+    color = "green" if status == "HEALTHY" else ("yellow" if status == "WARNING" else "red")
 
-    # --- Feature Values Section ---
-    report_parts.append(click.style("\n--- Feature Values ---", fg="cyan"))
-    features = analysis.get('features', {})
-    if features:
-        for k, v in features.items():
-            # Add a visual indicator for None values
-            indicator = click.style(" (NULL)", fg="yellow") if v is None else ""
-            report_parts.append(f"{k}: {v}{indicator}")
-    else:
-        report_parts.append("No features were retrieved.")
+    report_parts.append(f"\n--- Context Health Report ---")
+    report_parts.append(f"Status: {click.style(status, fg=color, bold=True)}")
+    report_parts.append(f"Diagnosis: {report['message']}")
+    report_parts.append(
+        f"Chunks: {report['chunk_count']} | "
+        f"Avg. Relevance: {report['avg_relevance_score']:.2f} | "
+        f"Diversity: {report['semantic_diversity_score']:.2f}"
+    )
 
-    # --- SLO Report Section ---
-    report_parts.append(click.style("\n--- SLO Report ---", fg="cyan"))
-    slo = analysis.get('slo_report')
-    if slo:
-        latency = slo.get('server_time_seconds')
-        latency_str = f"{latency:.4f}s" if isinstance(latency, float) else "N/A"
-        report_parts.append(f"Server Latency: {latency_str}")
+    report_parts.append(click.style("\n--- Retrieved Context Chunks ---", fg="cyan"))
+    chunks = analysis['retrieved_chunks']
+    if not chunks:
+        report_parts.append("No context was retrieved.")
     else:
-        report_parts.append("SLO info not available.")
+        for i, chunk in enumerate(chunks):
+            report_parts.append(f"Chunk {i+1} | Score: {chunk['score']:.2f}")
+            # Indent the text for readability
+            report_parts.append(f"  > {chunk['text']}")
 
-    # --- Temporal Cohesion Section ---
-    report_parts.append(click.style("\n--- Temporal Cohesion Report ---", fg="cyan"))
-    temporal = analysis.get('temporal_report')
-    if temporal:
-        risk = temporal['risk_level']
-        color = "green" if risk == "LOW" else ("yellow" if risk == "MEDIUM" else "red")
-        report_parts.append(f"Risk Level: {click.style(risk, fg=color, bold=True)}")
-        report_parts.append(f"Time Spread: {temporal['time_spread_seconds']:.2f} seconds")
-        report_parts.append(f"Oldest Feature Time: {temporal['min_effective_time']}")
-        report_parts.append(f"Newest Feature Time: {temporal['max_effective_time']}")
-    else:
-        report_parts.append("Temporal analysis not applicable (fewer than 2 features with timestamps).")
-    
     report_parts.append("\n")
     return "\n".join(report_parts)

@@ -1,118 +1,196 @@
-from typing import Dict, Any, List, TypedDict, Optional, Union
-from datetime import datetime
+from typing import Dict, Any, List, TypedDict, Optional
 
-# Library imports
-from tecton.framework.data_frame import FeatureVector
-
-# Local application imports
-from .mock_client import MockFeatureVector, MockSloInfo
+# Import our protocol for type compatibility
+from .mock_client import FeatureVectorProtocol
 
 # Using TypedDict for well-defined, type-checked dictionary structures.
 # This makes the data flow between modules much safer and easier to reason about.
 
-class SloReport(TypedDict):
-    is_eligible: bool
-    server_time_seconds: Optional[float]
-    dynamodb_time_seconds: Optional[float]
+class RetrievedChunk(TypedDict):
+    text: str
+    score: float
 
-class TemporalReport(TypedDict):
-    min_effective_time: str
-    max_effective_time: str
-    time_spread_seconds: float
-    risk_level: str
-    feature_timestamps: Dict[str, Optional[str]]
+class ContextHealthReport(TypedDict):
+    status: str
+    message: str
+    chunk_count: int
+    avg_relevance_score: float
+    semantic_diversity_score: float
 
 class AnalysisResult(TypedDict):
-    features: Dict[str, Any]
-    slo_report: Optional[SloReport]
-    temporal_report: Optional[TemporalReport]
-    raw_metadata: Dict[str, Any]
+    retrieved_chunks: List[RetrievedChunk]
+    health_report: ContextHealthReport
     error: Optional[str]
 
-def analyze_feature_vector(fv_object: Union[FeatureVector, MockFeatureVector]) -> AnalysisResult:
-    """
-    Takes a Tecton FeatureVector object and returns a structured dictionary of analysis results.
-    This function is the heart of the debugger's logic.
-
-    Args:
-        fv_object: The FeatureVector object returned by the Tecton SDK.
-
-    Returns:
-        An AnalysisResult dictionary containing the full diagnosis.
-    """
-    # 1. Extract Feature Values
-    features_dict: Dict[str, Any] = fv_object.to_dict()  # type: ignore
-
-    # 2. Analyze SLO Information
-    slo_info = fv_object.slo_info
-    slo_report: Optional[SloReport] = None
-    if slo_info:
-        if isinstance(slo_info, MockSloInfo):
-            slo_report = {
-                "is_eligible": slo_info.slo_eligible,
-                "server_time_seconds": slo_info.slo_server_time_seconds,
-                "dynamodb_time_seconds": slo_info.store_response_time_seconds
-            }
-        else:
-            slo_report = {
-                "is_eligible": slo_info.get("slo_eligible", "false").lower() == "true",
-                "server_time_seconds": float(slo_info.get("slo_server_time_seconds", 0)) if slo_info.get("slo_server_time_seconds") else None,
-                "dynamodb_time_seconds": float(slo_info.get("slo_store_response_time_seconds", 0)) if slo_info.get("slo_store_response_time_seconds") else None
-            }
-
-    # 3. Perform Temporal Cohesion Analysis
-    # Use return_effective_times parameter for to_dict
-    raw_metadata_dict = fv_object.to_dict(return_effective_times=True)  # type: ignore
+def _extract_chunks(fv_object: FeatureVectorProtocol) -> List[RetrievedChunk]:
+    """Extract and parse retrieved context chunks from the feature vector."""
+    features = fv_object.to_dict()
+    chunks: Dict[int, Dict[str, Any]] = {}
     
-    # Type assertion for the metadata dictionary
-    raw_metadata: Dict[str, Any] = {}
-    if '__metadata__' in raw_metadata_dict:
-        metadata_value = raw_metadata_dict['__metadata__']  # type: ignore
-        if isinstance(metadata_value, dict):
-            raw_metadata = metadata_value  # type: ignore
-    
-    # Type assertion for effective times
-    effective_times: Dict[str, Optional[str]] = {}
-    if 'effective_times' in raw_metadata:
-        effective_times_value = raw_metadata['effective_times']  # type: ignore
-        if isinstance(effective_times_value, dict):
-            effective_times = effective_times_value  # type: ignore
-    
-    timestamps: List[datetime] = []
-    for t in effective_times.values():
-        if t:
+    for key, value in features.items():
+        # Handle both dot notation (retrieved_context.chunk_1_text) and underscore notation (chunk_1_text)
+        if "chunk" in key and ("text" in key or "score" in key):
             try:
-                timestamps.append(datetime.fromisoformat(t.replace("Z", "+00:00")))
-            except ValueError:
+                # Split by both dot and underscore to handle different formats
+                if '.' in key:
+                    # Handle dot notation: retrieved_context.chunk_1_text
+                    parts = key.split('.')
+                    chunk_part = parts[1] if len(parts) > 1 else key
+                else:
+                    # Handle underscore notation: chunk_1_text
+                    chunk_part = key
+                
+                # Extract chunk number from chunk_1_text or similar
+                chunk_parts = chunk_part.split('_')
+                if len(chunk_parts) >= 2 and chunk_parts[0] == 'chunk':
+                    chunk_num = int(chunk_parts[1])
+                    if chunk_num not in chunks:
+                        chunks[chunk_num] = {}
+                    
+                    # Store text and score separately - check the end of the key
+                    if key.endswith('_text'):
+                        # Skip null values
+                        if value is not None:
+                            chunks[chunk_num]['text'] = str(value)
+                    elif key.endswith('_score'):
+                        # Skip null values
+                        if value is not None:
+                            chunks[chunk_num]['score'] = float(value)
+            except (ValueError, IndexError):
                 continue
     
-    temporal_report: Optional[TemporalReport] = None
-    if len(timestamps) > 1:
-        min_time = min(timestamps)
-        max_time = max(timestamps)
-        spread_seconds = (max_time - min_time).total_seconds()
-        
-        # Heuristic-based risk assessment. This is a simple but effective starting point.
-        risk_level = "LOW"
-        if spread_seconds > 3600:  # > 1 hour
-            risk_level = "HIGH"
-        elif spread_seconds > 60:  # > 1 minute
-            risk_level = "MEDIUM"
+    # Sort chunks by number and filter out incomplete ones
+    sorted_chunks = sorted(chunks.items())
+    result: List[RetrievedChunk] = [
+        {"text": chunk_data['text'], "score": chunk_data['score']} 
+        for _, chunk_data in sorted_chunks 
+        if 'text' in chunk_data and 'score' in chunk_data
+    ]
+    return result
 
-        temporal_report = {
-            "min_effective_time": min_time.isoformat(),
-            "max_effective_time": max_time.isoformat(),
-            "time_spread_seconds": spread_seconds,
-            "risk_level": risk_level,
-            "feature_timestamps": effective_times
-        }
+def _calculate_semantic_diversity(texts: List[str]) -> float:
+    """Calculate a simple semantic diversity score based on text similarity."""
+    if len(texts) < 2:
+        return 1.0  # Single chunk is considered diverse
     
-    # 4. Assemble the final, comprehensive report
-    analysis_result: AnalysisResult = {
-        "features": features_dict,
-        "slo_report": slo_report,
-        "temporal_report": temporal_report,
-        "raw_metadata": raw_metadata,
+    # Simple heuristic: check for repeated phrases and word overlap
+    all_words: set[str] = set()
+    total_words = 0
+    repeated_phrases = 0
+    phrase_similarity_score = 0
+    
+    for text in texts:
+        words = text.lower().split()
+        total_words += len(words)
+        all_words.update(words)
+        
+        # Check for repeated phrases and high similarity
+        for other_text in texts:
+            if text != other_text:
+                # Check if one text is contained in another (strong repetition)
+                if text.lower() in other_text.lower() or other_text.lower() in text.lower():
+                    repeated_phrases += 1
+                
+                # Calculate word overlap between texts
+                other_words = set(other_text.lower().split())
+                overlap = len(set(words) & other_words)
+                total_unique = len(set(words) | other_words)
+                if total_unique > 0:
+                    similarity = overlap / total_unique
+                    phrase_similarity_score += similarity
+    
+    # Calculate diversity based on unique words and phrase repetition
+    word_diversity = len(all_words) / max(total_words, 1)
+    
+    # Normalize phrase similarity score
+    max_possible_similarity = len(texts) * (len(texts) - 1)
+    if max_possible_similarity > 0:
+        phrase_similarity_score = phrase_similarity_score / max_possible_similarity
+        phrase_diversity = max(0, 1 - phrase_similarity_score)
+    else:
+        phrase_diversity = 1.0
+    
+    # Penalize heavily for repeated phrases
+    phrase_penalty = max(0, repeated_phrases / max(len(texts) * (len(texts) - 1), 1))
+    phrase_diversity = phrase_diversity * (1 - phrase_penalty)
+    
+    # Combine both metrics with more weight on phrase diversity for context collapse detection
+    return (word_diversity * 0.3 + phrase_diversity * 0.7)
+
+def analyze_retrieved_context(fv_object: FeatureVectorProtocol | None) -> AnalysisResult:
+    """
+    Analyzes a retrieved context vector and provides health diagnostics.
+    
+    Args:
+        fv_object: The FeatureVector object returned by the Tecton SDK or mock client.
+        
+    Returns:
+        An AnalysisResult dictionary containing the context health diagnosis.
+    """
+    if fv_object is None:
+        # Return a structure consistent with a failed analysis
+        failed_health_report: ContextHealthReport = {
+            "status": "CRITICAL", 
+            "message": "Received null feature vector.", 
+            "chunk_count": 0, 
+            "avg_relevance_score": 0.0, 
+            "semantic_diversity_score": 0.0
+        }
+        return {
+            "retrieved_chunks": [], 
+            "health_report": failed_health_report, 
+            "error": "Received null feature vector."
+        }
+
+    # Extract chunks from the feature vector
+    chunks = _extract_chunks(fv_object)
+    chunk_count = len(chunks)
+    
+    if chunk_count == 0:
+        empty_health_report: ContextHealthReport = {
+            "status": "CRITICAL", 
+            "message": "No context chunks retrieved.", 
+            "chunk_count": 0, 
+            "avg_relevance_score": 0.0, 
+            "semantic_diversity_score": 0.0
+        }
+        return {
+            "retrieved_chunks": [], 
+            "health_report": empty_health_report, 
+            "error": None
+        }
+
+    # Calculate metrics
+    scores = [chunk['score'] for chunk in chunks]
+    texts = [chunk['text'] for chunk in chunks]
+    avg_score = sum(scores) / chunk_count
+    diversity_score = _calculate_semantic_diversity(texts)
+    
+    # Determine health status
+    status = "HEALTHY"
+    message = "Retrieved context appears relevant and diverse."
+    
+    if avg_score < 0.75:
+        status = "CRITICAL"
+        message = "Relevance scores are critically low. Context is likely off-topic."
+    elif avg_score < 0.82:
+        status = "WARNING"
+        message = "Relevance scores are mediocre. Review context for relevance."
+        
+    if diversity_score < 0.80 and status != "CRITICAL":
+        status = "WARNING"
+        message = "Semantic diversity is low ('context collapse'). Chunks are repetitive."
+
+    final_health_report: ContextHealthReport = {
+        "status": status, 
+        "message": message, 
+        "chunk_count": chunk_count,
+        "avg_relevance_score": avg_score, 
+        "semantic_diversity_score": diversity_score
+    }
+
+    return {
+        "retrieved_chunks": chunks, 
+        "health_report": final_health_report, 
         "error": None
     }
-    return analysis_result
