@@ -133,7 +133,7 @@ def analyze_retrieved_context(fv_object: FeatureVectorProtocol | None) -> Analys
         # Return a structure consistent with a failed analysis
         failed_health_report: ContextHealthReport = {
             "status": "CRITICAL", 
-            "message": "Received null feature vector.", 
+            "message": "Feature vector is null or undefined.", 
             "chunk_count": 0, 
             "avg_relevance_score": 0.0, 
             "semantic_diversity_score": 0.0
@@ -141,7 +141,7 @@ def analyze_retrieved_context(fv_object: FeatureVectorProtocol | None) -> Analys
         return {
             "retrieved_chunks": [], 
             "health_report": failed_health_report, 
-            "error": "Received null feature vector."
+            "error": "Feature vector is null or undefined."
         }
 
     # Extract chunks from the feature vector
@@ -156,7 +156,7 @@ def analyze_retrieved_context(fv_object: FeatureVectorProtocol | None) -> Analys
     if chunk_count == 0:
         empty_health_report: ContextHealthReport = {
             "status": "CRITICAL", 
-            "message": "No context chunks retrieved.", 
+            "message": "No context chunks retrieved from feature service.", 
             "chunk_count": 0, 
             "avg_relevance_score": 0.0, 
             "semantic_diversity_score": 0.0
@@ -177,18 +177,18 @@ def analyze_retrieved_context(fv_object: FeatureVectorProtocol | None) -> Analys
     
     # Determine health status
     status = "HEALTHY"
-    message = "GOOD: The chunks answer the user's question well and provide different useful information."
+    message = "HEALTHY: Retrieved context demonstrates high relevance and semantic diversity."
     
     if avg_score < 0.60:
         status = "CRITICAL"
-        message = "BAD: The chunks don't answer the user's question well. They're off-topic."
+        message = "CRITICAL: Critically low relevance scores indicate a mismatch between the query and retrieved context."
     elif avg_score < 0.75:
         status = "WARNING"
-        message = "WARNING: The chunks only kinda answer the user's question. They're not very helpful."
+        message = "WARNING: Moderate relevance scores suggest suboptimal context quality for the given query."
         
     if diversity_score < 0.80 and status != "CRITICAL":
         status = "WARNING"
-        message = "WARNING: The chunks are too similar to each other. They're basically saying the same thing."
+        message = "WARNING: Low semantic diversity indicates repetitive content patterns across retrieved chunks."
 
     final_health_report: ContextHealthReport = {
         "status": status, 

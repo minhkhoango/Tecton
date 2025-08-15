@@ -14,7 +14,7 @@ from .ui_components import format_cli_report
 @click.option('--seed', type=int, help='Optional seed for deterministic mock output.')
 @click.option('--mock', is_flag=True, default=False, help='Run in mock mode.')
 def main(status: str, quality: str, join_keys: str, query: str, seed: Optional[int], mock: bool) -> None:
-    """A 1-Click Debugger for RAG Context Quality."""
+    """RAG Diagnostic Engine - Production-ready context quality analysis."""
     try:
         # Validate status/quality parameter based on mode
         if mock and not status and not quality:
@@ -32,11 +32,11 @@ def main(status: str, quality: str, join_keys: str, query: str, seed: Optional[i
         join_keys_dict: Dict[str, Any] = json.loads(join_keys)
         
         mode = "MOCK" if mock else "LIVE"
-        click.echo(f"🔬 Running in {click.style(mode, bold=True)} mode.")
+        click.echo(f"Running in {click.style(mode, bold=True)} mode.")
         
         if mock:
-            click.echo(f"🎭 Mock Status: {click.style(status, bold=True)}")
-        click.echo(f"💬 Diagnosing Query: {click.style(query, bold=True)}")
+            click.echo(f"Mock Status: {click.style(status, bold=True)}")
+        click.echo(f"Diagnosing Query: {click.style(query, bold=True)}")
         
         if mock:
             client = MockTectonDebuggerClient()
@@ -45,7 +45,7 @@ def main(status: str, quality: str, join_keys: str, query: str, seed: Optional[i
             from .tecton_client import TectonDebuggerClient
             client = TectonDebuggerClient()
         
-        click.echo("📡 Fetching context vector...")
+        click.echo("Fetching context vector...")
         # For live mode, status might be None, so we need to handle that
         request_data: Dict[str, Any] = {"query": query}
         if seed is not None:
@@ -57,7 +57,7 @@ def main(status: str, quality: str, join_keys: str, query: str, seed: Optional[i
             # In live mode, status is not used by the real client
             feature_vector = client.fetch_context_vector("", join_keys_dict, request_data)
         
-        click.echo("🔍 Analyzing context...")
+        click.echo("Analyzing context...")
         analysis: AnalysisResult = analyze_retrieved_context(feature_vector)
 
         # Check for analysis errors
@@ -66,7 +66,7 @@ def main(status: str, quality: str, join_keys: str, query: str, seed: Optional[i
             click.secho(f"Analysis Error: {error}", fg="red", err=True)
             return
 
-        click.echo("📊 Generating report...")
+        click.echo("Generating report...")
         # The CLI formatter is now responsible for all console output.
         report = format_cli_report(analysis)
         click.echo(report)

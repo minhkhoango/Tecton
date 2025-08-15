@@ -1,5 +1,9 @@
 import os
 from typing import Optional
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 class ConfigError(Exception):
     """Custom exception for configuration-related errors."""
@@ -15,6 +19,7 @@ class Config:
     tecton_url: str
     api_key: str
     workspace_name: str
+    api_service: str
 
     def __init__(self) -> None:
         """
@@ -26,11 +31,12 @@ class Config:
         self.tecton_url = os.environ.get("TECTON_URL", "")
         self.api_key = os.environ.get("TECTON_API_KEY", "")
         self.workspace_name = os.environ.get("TECTON_WORKSPACE", "")
+        self.api_service = os.environ.get("API_SERVICE", "")
 
-        if not all([self.tecton_url, self.api_key, self.workspace_name]):
+        if not all([self.tecton_url, self.api_key, self.workspace_name, self.api_service]):
             raise ConfigError(
                 "Missing required environment variables. "
-                "Please set TECTON_URL, TECTON_API_KEY, and TECTON_WORKSPACE."
+                "Please set TECTON_URL, TECTON_API_KEY, TECTON_WORKSPACE, and API_SERVICE."
             )
 
 # --- Global Config Instance ---

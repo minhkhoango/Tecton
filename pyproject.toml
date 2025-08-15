@@ -15,6 +15,7 @@ pytz = "^2023.3"
 # Added for semantic analysis and visualization
 scikit-learn = "^1.7.1"
 plotly = "^5.18.0"
+python-dotenv = "^1.1.1"
 
 [tool.poetry.scripts]
 rag-debug = "rag_context_debugger.cli:main"

@@ -13,8 +13,8 @@ from rag_context_debugger.analysis import analyze_retrieved_context, AnalysisRes
 from rag_context_debugger.ui_components import display_visual_summary, display_context_details
 
 def main() -> None:
-    st.set_page_config(layout="wide", page_title="RAG Context Debugger")
-    st.title("🔬 1-Click RAG Context Debugger")
+    st.set_page_config(layout="wide", page_title="RAG Diagnostic Engine")
+    st.title("RAG Diagnostic Engine")
     st.markdown("Instantly diagnose the quality of context retrieved for your RAG application.")
 
     use_mock = st.checkbox("Run in Mock Mode", value=True, help="Simulate API calls without a live Tecton connection.")
@@ -56,7 +56,7 @@ def main() -> None:
         
 
 
-    if st.button("Diagnose Context", type="primary", use_container_width=True):
+    if st.button("Analyze Context", type="primary", use_container_width=True):
         try:
             join_keys: Dict[str, Any] = json.loads(join_keys_str)
             

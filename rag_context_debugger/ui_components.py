@@ -48,7 +48,7 @@ def display_visual_summary(analysis: AnalysisResult) -> None:
     status = report.get('status', 'UNKNOWN')
     color = _get_status_color(status)
 
-    st.header(f"Context Health: :{color}[{status}]")
+    st.header(f"Context Quality Analysis: :{color}[{status}]")
     st.write(f"**Diagnosis:** {report['message']}")
     
     col1, col2 = st.columns([1, 1])
@@ -124,7 +124,7 @@ def format_cli_report(analysis: AnalysisResult) -> str:
     status = report.get('status', 'UNKNOWN')
     color = "green" if status == "HEALTHY" else ("yellow" if status == "WARNING" else "red")
 
-    report_parts.append(f"\n--- Context Health Report ---")
+    report_parts.append(f"\n--- Context Quality Report ---")
     report_parts.append(f"Status: {click.style(status, fg=color, bold=True)}")
     report_parts.append(f"Diagnosis: {report['message']}")
     report_parts.append(
