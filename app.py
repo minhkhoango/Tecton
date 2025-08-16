@@ -6,7 +6,7 @@ import json
 import streamlit as st
 
 # Local application imports
-from rag_context_debugger.config import config, ConfigError
+from rag_context_debugger.config import ConfigError
 from rag_context_debugger.tecton_client import TectonDebuggerClient
 from rag_context_debugger.mock_client import MockTectonDebuggerClient
 from rag_context_debugger.analysis import analyze_retrieved_context, AnalysisResult
@@ -17,11 +17,11 @@ def main() -> None:
     st.title("RAG Diagnostic Engine")
     st.markdown("Instantly diagnose the quality of context retrieved for your RAG application.")
 
-    use_mock = st.checkbox("Run in Mock Mode", value=True, help="Simulate API calls without a live Tecton connection.")
-
-    if not use_mock and config is None:
-        st.error("Please set Tecton environment variables or use Mock Mode.")
-        st.stop()
+    use_mock = st.checkbox("Run in Mock Mode", 
+        value=True, # Always on
+        disabled=True, # Always on
+        help="The live client is available for private, secure demonstrations."
+    )
 
     st.subheader("Diagnostic Request")
     
